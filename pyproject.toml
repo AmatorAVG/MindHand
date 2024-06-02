@@ -1,0 +1,31 @@
+[tool.black]
+line-length = 79
+force-exclude = '''
+/(
+\.git
+| \.mypy_cache
+| \.venv
+| \.buildozer
+| _build
+| build
+| dist
+)/
+'''
+[tool.poetry]
+name = "mindhand"
+version = "0.1.0"
+description = ""
+authors = ["AmatorAVG <agushcha@team.vtbconnect.ru>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+kivy = "^2.3.0"
+cython = "^3.0.10"
+black = "^24.4.2"
+pydantic = "^2.7.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
