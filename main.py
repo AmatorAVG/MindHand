@@ -106,7 +106,7 @@ class Touchtracer(FloatLayout):
                 # Rectangle(pos=(0, touch.y), size=(win.width, 1), group=g),
                 Point(
                     points=(touch.x, touch.y),
-                    source="particle.png",
+                    # source="particle.png",
                     pointsize=pointsize,
                     group=g,
                 )
@@ -160,7 +160,7 @@ class Touchtracer(FloatLayout):
                     ud["lines"].append(
                         Point(
                             points=(),
-                            source="particle.png",
+                            # source="particle.png",
                             pointsize=pointsize,
                             group=g,
                         )
@@ -259,17 +259,23 @@ class Touchtracer(FloatLayout):
             with self.canvas:
                 Color(*get_color_from_hex(path_string[1]))
                 points_svg = path_string[0].split()
+                points = []
                 for i in range(0, len(points_svg), 2):
                     x = int(points_svg[i][1:])
                     y = int(points_svg[i + 1])
+                    points.extend([x, int(dp(600) - y)])
+                    # Point(pointsize=int(path_string[2])).add_point(x, int(dp(600) - y))
+                if len(points) == 2:
                     Point(
-                        points=(x, y),
-                        source="particle.png",
-                        pointsize=int(path_string[2])*2,
+                        points=points,
+                        # source="particle.png",
+                        pointsize=int(path_string[2]),
                         # group=g,
                     )
+                else:
+                    Line(bezier=points, width=int(path_string[2]),
+                         bezier_precision=50)
 
-                # TODO переделать в Line(points=points, close=True)
                 # ud["lines"] = [
                 # Rectangle(pos=(touch.x, 0), size=(1, win.height), group=g),
                 # Rectangle(pos=(0, touch.y), size=(win.width, 1), group=g),
