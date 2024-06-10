@@ -38,6 +38,7 @@ from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
 
 from schemas import PointSchema, LineSchema
+from services import generate_points_on_line
 
 kivy.require("1.0.6")
 
@@ -92,7 +93,7 @@ class Touchtracer(FloatLayout):
         win = self.get_parent_window()
         ud = touch.ud
         ud["group"] = g = str(touch.uid)
-        pointsize = 5
+        pointsize = 30
         print(touch.profile)
         if "pressure" in touch.profile:
             ud["pressure"] = touch.pressure
@@ -106,7 +107,7 @@ class Touchtracer(FloatLayout):
                 # Rectangle(pos=(0, touch.y), size=(win.width, 1), group=g),
                 Point(
                     points=(touch.x, touch.y),
-                    # source="particle.png",
+                    source="particle.png",
                     pointsize=pointsize,
                     group=g,
                 )
@@ -160,7 +161,7 @@ class Touchtracer(FloatLayout):
                     ud["lines"].append(
                         Point(
                             points=(),
-                            # source="particle.png",
+                            source="particle.png",
                             pointsize=pointsize,
                             group=g,
                         )
@@ -264,17 +265,8 @@ class Touchtracer(FloatLayout):
                     x = int(points_svg[i][1:])
                     y = int(points_svg[i + 1])
                     points.extend([x, int(dp(600) - y)])
-                    # Point(pointsize=int(path_string[2])).add_point(x, int(dp(600) - y))
-                if len(points) == 2:
-                    Point(
-                        points=points,
-                        # source="particle.png",
-                        pointsize=int(path_string[2]),
-                        # group=g,
-                    )
-                else:
-                    Line(bezier=points, width=int(path_string[2]),
-                         bezier_precision=50)
+                Point(points=generate_points_on_line(points, int(path_string[2])),
+                    source="particle.png", pointsize=int(path_string[2]))
 
                 # ud["lines"] = [
                 # Rectangle(pos=(touch.x, 0), size=(1, win.height), group=g),
@@ -310,11 +302,6 @@ class TouchtracerApp(App):
         openbtn = Button(text="Open", pos=(230, 20), size=(100, 50))
         openbtn.bind(on_release=self.open_svg)
 
-        # self.image = Image()
-        # self.image.size_hint = (0.5, 0.5)
-        # self.image.pos_hint = {'x': 0.25, 'y': 0.35}
-        #
-        # self.painter.add_widget(self.image)
 
         parent.add_widget(self.painter)
         parent.add_widget(clearbtn)
