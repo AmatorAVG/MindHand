@@ -1,5 +1,39 @@
 import math
 
+from kivy.graphics import Color
+from kivy.metrics import dp
+
+
+def normalize_pressure(pressure):
+    print(pressure)
+    # this might mean we are on a device whose pressure value is
+    # incorrectly reported by SDL2, like recent iOS devices.
+    if pressure == 0.0:
+        return 1
+    return dp(pressure * 10)
+
+def calculate_points(x1, y1, x2, y2, steps=5):
+    dx = x2 - x1
+    dy = y2 - y1
+    dist = math.sqrt(dx * dx + dy * dy)
+    if dist < steps:
+        return
+    o = []
+    m = dist / steps
+    for i in range(1, int(m)):
+        mi = i / m
+        lastx = x1 + dx * mi
+        lasty = y1 + dy * mi
+        o.extend([lastx, lasty])
+    return o
+
+def kivy_color_to_svg(color: Color) -> str:
+    r_hex = format(int(color.r * 255), "02x")
+    g_hex = format(int(color.g * 255), "02x")
+    b_hex = format(int(color.b * 255), "02x")
+    a_hex = format(int(color.a * 255), "02x")
+    return f"#{r_hex}{g_hex}{b_hex}{a_hex}"
+
 
 def generate_points_on_line(points: list, point_size: int) -> list:
     """

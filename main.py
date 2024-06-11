@@ -38,7 +38,8 @@ from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
 
 from schemas import PointSchema, LineSchema
-from services import generate_points_on_line
+from services import generate_points_on_line, kivy_color_to_svg, \
+    calculate_points, normalize_pressure
 
 kivy.require("1.0.6")
 
@@ -51,42 +52,17 @@ from random import random
 from math import sqrt
 
 
-def calculate_points(x1, y1, x2, y2, steps=5):
-    dx = x2 - x1
-    dy = y2 - y1
-    dist = sqrt(dx * dx + dy * dy)
-    if dist < steps:
-        return
-    o = []
-    m = dist / steps
-    for i in range(1, int(m)):
-        mi = i / m
-        lastx = x1 + dx * mi
-        lasty = y1 + dy * mi
-        o.extend([lastx, lasty])
-    return o
 
 
-def kivy_color_to_svg(color: Color) -> str:
-    # r, g, b, a = kivy_color
-    r_hex = format(int(color.r * 255), "02x")
-    g_hex = format(int(color.g * 255), "02x")
-    b_hex = format(int(color.b * 255), "02x")
-    a_hex = format(int(color.a * 255), "02x")
-    return f"#{r_hex}{g_hex}{b_hex}{a_hex}"
+
+
 
 
 class Touchtracer(FloatLayout):
     curve_count = 0
     curve_points: dict[int, LineSchema] = {}
 
-    def normalize_pressure(self, pressure):
-        print(pressure)
-        # this might mean we are on a device whose pressure value is
-        # incorrectly reported by SDL2, like recent iOS devices.
-        if pressure == 0.0:
-            return 1
-        return dp(pressure * 10)
+
 
     def on_touch_down(self, touch):
         # return
@@ -97,7 +73,7 @@ class Touchtracer(FloatLayout):
         print(touch.profile)
         if "pressure" in touch.profile:
             ud["pressure"] = touch.pressure
-            pointsize = self.normalize_pressure(touch.pressure)
+            pointsize = normalize_pressure(touch.pressure)
         # ud["color"] = random()
 
         with self.canvas:
@@ -154,7 +130,7 @@ class Touchtracer(FloatLayout):
                 or not 0.99 < (touch.pressure / old_pressure) < 1.01
             ):
                 g = ud["group"]
-                pointsize = self.normalize_pressure(touch.pressure)
+                pointsize = normalize_pressure(touch.pressure)
                 with self.canvas:
                     # Color(ud["color"], 1, 1, mode="hsv", group=g)
                     Color(random(), random(), random(), 1, group=g)
@@ -189,7 +165,7 @@ class Touchtracer(FloatLayout):
                 x=int(round(touch.x)),
                 y=int(round(touch.y)),
                 size=(
-                    self.normalize_pressure(touch.pressure)
+                    normalize_pressure(touch.pressure)
                     if "pressure" in ud
                     else 1
                 ),
@@ -245,7 +221,8 @@ class Touchtracer(FloatLayout):
         self.curve_count = 0
         self.curve_points = {}
 
-    def parse_svg(self, svg_filename):
+    def parse_svg(self, svg_filename: str):
+        """Отображаем ранее сохраненный SVG-файл на канве"""
         svg_dom = minidom.parse(svg_filename)
         path_strings = [
             (
@@ -257,6 +234,7 @@ class Touchtracer(FloatLayout):
         ]
 
         for path_string in path_strings:
+            self.curve_count += 1
             with self.canvas:
                 Color(*get_color_from_hex(path_string[1]))
                 points_svg = path_string[0].split()
@@ -265,25 +243,32 @@ class Touchtracer(FloatLayout):
                     x = int(points_svg[i][1:])
                     y = int(points_svg[i + 1])
                     points.extend([x, int(dp(600) - y)])
-                Point(points=generate_points_on_line(points, int(path_string[2])),
-                    source="particle.png", pointsize=int(path_string[2]))
+                pointsize = int(path_string[2])
+                points_on_line = generate_points_on_line(points,
+                                                         pointsize)
+                Point(points=points_on_line,
+                    source="particle.png", pointsize=pointsize)
 
+                self.curve_points[self.curve_count] = LineSchema(
+                    x=points_on_line[0],
+                    y=points_on_line[1],
+                    size=pointsize,
+                    color=path_string[1],
+                )
+                for i in range(2, len(points_on_line), 2):
+                    self.curve_points[self.curve_count].points.append(
+                        PointSchema(
+                            x=points_on_line[i],
+                            y=points_on_line[i + 1],
+                            size=pointsize,
+                        )
+                    )
+                # g = str(self.curve_count)
                 # ud["lines"] = [
                 # Rectangle(pos=(touch.x, 0), size=(1, win.height), group=g),
                 # Rectangle(pos=(0, touch.y), size=(win.width, 1), group=g),
 
                 # ]
-
-
-# class SvgWidget(Scatter):
-#
-#     def __init__(self, filename, **kwargs):
-#         super(SvgWidget, self).__init__(**kwargs)
-#         with self.canvas:
-#             svg = Svg(filename)
-#         self.size = svg.width, svg.height
-
-
 class TouchtracerApp(App):
     title = "Touchtracer"
     icon = "icon.png"
@@ -317,11 +302,6 @@ class TouchtracerApp(App):
             # Очистить канву перед отображением нового SVG файла
             self.painter.clear_canvas()
             self.painter.parse_svg("drawing.svg")
-            # Открыть и отобразить SVG файл
-            # svg = SvgWidget('drawing.svg', size_hint=(None, None))
-            # self.painter.add_widget(svg)
-            # svg.scale = 1.
-            # svg.center = Window.center
 
     def clear_canvas(self, obj):
         self.painter.clear_canvas()

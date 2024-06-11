@@ -1,5 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" height="800.0" width="600.0">
-<path d="M198 306 L208 303 L239 295 L276 286 L319 279 L376 267 L406 263 L421 261 L429 258 L433 257 L434 257 L436 257 " fill="none" stroke="#ae3758ff" stroke-width="30"/>
-<path d="M228 349 L229 349 L248 349 L278 347 L311 346 L346 344 L380 337 L403 332 L437 324 L456 318 L468 316 L475 311 L491 311 L494 306 L496 306 " fill="none" stroke="#5d3d8aff" stroke-width="30"/>
-<path d="M261 211 L261 220 L278 253 L293 286 L309 318 L327 350 L342 382 L347 403 L352 418 L357 427 L358 434 L360 434 L361 434 " fill="none" stroke="#b4b0eeff" stroke-width="30"/>
+<path d="M146 165 " fill="none" stroke="#423ffcff" stroke-width="30"/>
+<path d="M146 210 L146 211 L148 211 L149 210 L151 210 L153 210 L155 208 L157 208 " fill="none" stroke="#b60cabff" stroke-width="30"/>
 </svg>
