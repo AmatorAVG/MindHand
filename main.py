@@ -31,6 +31,7 @@ from xml.dom import minidom
 
 import kivy
 from kivy.core.window import Window
+from kivy.graphics.context_instructions import Scale, PushMatrix, PopMatrix
 from kivy.uix.button import Button
 from kivy.uix.checkbox import CheckBox
 from kivy.uix.slider import Slider
@@ -68,13 +69,29 @@ class Pens(Enum):
 
 # LineSchema.model_rebuild()
 class Touchtracer(FloatLayout):
-    curve_count = 0
-    curve_points: dict[int, LineSchema] = {}
-    current_pen = Pens.PEN
-    current_pen_size = 10
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.curve_count = 0
+        self.curve_points: dict[int, LineSchema] = {}
+        self.current_pen = Pens.PEN
+        self.current_pen_size = 10
+
+        # Переменные для масштабирования
+        self.scale = 1
+        self.scale_factor = 1.1
+        self.mouse_down_pos = None
+        self.last_x, self.last_y = 0, 0
 
     def on_touch_down(self, touch):
         # return
+        # Запоминаем позицию нажатия правой кнопки
+        print(touch.button)
+        if touch.button == 'right':
+            self.mouse_down_pos = touch.pos
+            self.last_x, self.last_y = touch.x, touch.y  # Запоминаем позицию для рисования
+            return
+        # Начинаем рисовать линию при нажатии левой кнопкой
         win = self.get_parent_window()
         ud = touch.ud
         ud["group"] = g = str(touch.uid)
@@ -96,7 +113,7 @@ class Touchtracer(FloatLayout):
                 Point(
                     points=(touch.x, touch.y),
                     source=self.current_pen.value[1],
-                    pointsize=pointsize,
+                    pointsize=round(pointsize * self.scale),
                     group=g,
                 )
             ]
@@ -107,8 +124,8 @@ class Touchtracer(FloatLayout):
         touch.grab(self)
         self.curve_count += 1
         self.curve_points[self.curve_count] = LineSchema(
-            x=int(round(touch.x)),
-            y=int(round(touch.y)),
+            x=int(round(touch.x / self.scale)),
+            y=int(round(touch.y / self.scale)),
             size=pointsize,
             color=kivy_color_to_svg(ud["color"]),
             pen=self.current_pen.name
@@ -117,6 +134,37 @@ class Touchtracer(FloatLayout):
         return True
 
     def on_touch_move(self, touch):
+        # Масштабирование при зажатой правой кнопке
+        if touch.button == 'right' and self.mouse_down_pos:
+            dx = touch.x - self.mouse_down_pos[0]
+            dy = touch.y - self.mouse_down_pos[1]
+
+            # Изменяем масштаб
+            if abs(dx) > 5 or abs(dy) > 5:
+                if dx > 0:
+                    self.scale *= self.scale_factor
+                elif dx < 0:
+                    self.scale /= self.scale_factor
+
+                self.scale = min(max(0.2, self.scale), 5)
+                # Обновляем позицию нажатия
+                self.mouse_down_pos = touch.x, touch.y
+
+                # Применяем масштаб к канвасу
+                self.canvas.clear() # Очищаем канвас перед обновлением
+                with self.canvas:
+                    PushMatrix()  # Сохраняем текущую матрицу преобразования
+                    # self.canvas.translate = (touch.x, touch.y) # Переводим в точку касания
+                    # self.canvas.scale = self.scale # Масштабируем
+                    # Рисуем заново
+                    print(self.scale)
+                    Scale(self.scale, self.scale, self.scale)
+                    # Color(1, 0, 0, 1)
+                    # self.line = Line(points=(100, 100, 200, 200), width=2)
+                    self.restore_canvas()
+                    PopMatrix()  # Восстанавливаем матрицу преобразования
+            return
+
         if touch.grab_current is not self:
             return
         ud = touch.ud
@@ -136,7 +184,7 @@ class Touchtracer(FloatLayout):
         pointsize = (
             normalize_pressure(touch.pressure)
             if "pressure" in ud
-            else self.current_pen_size
+            else round(self.current_pen_size * self.scale)
         )
         points = calculate_points(
             oldx, oldy, touch.x, touch.y, steps=pointsize / 7
@@ -172,8 +220,8 @@ class Touchtracer(FloatLayout):
                     # print(points[idx], 600-points[idx + 1])
                     self.curve_points[self.curve_count].points.append(
                         PointSchema(
-                            x=int(round(points[idx])),
-                            y=int(round(points[idx + 1])),
+                            x=int(round(points[idx] / self.scale)),
+                            y=int(round(points[idx + 1] / self.scale)),
                             size=pointsize,
                         )
                     )
@@ -292,7 +340,19 @@ class Touchtracer(FloatLayout):
                 # Rectangle(pos=(0, touch.y), size=(win.width, 1), group=g),
 
                 # ]
-
+    def restore_canvas(self):
+        for line in self.curve_points.values():
+            Color(*get_color_from_hex(line.color))
+            line_points = [line.x, line.y]
+            for point in line.points:
+                line_points.append(point.x)
+                line_points.append(point.y)
+            p = [line.x, line.y].extend([coord for point in line.points for
+                                         coord in [point.x, point.y]])
+            Point(points=line_points, source=Pens[
+                    line.pen].value[1],
+                pointsize=line.size
+            )
 
 class TouchtracerApp(App):
     title = "Touchtracer"
@@ -376,6 +436,7 @@ class TouchtracerApp(App):
         with self.painter.canvas:
             # Очистить канву перед отображением нового SVG файла
             self.painter.clear_canvas()
+            self.painter.scale = 1
             self.painter.parse_svg("drawing.svg")
 
     def clear_canvas(self, obj):
