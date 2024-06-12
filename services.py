@@ -12,7 +12,8 @@ def normalize_pressure(pressure):
         return 1
     return dp(pressure * 10)
 
-def calculate_points(x1, y1, x2, y2, steps=5):
+
+def calculate_points(x1, y1, x2, y2, steps=30):
     dx = x2 - x1
     dy = y2 - y1
     dist = math.sqrt(dx * dx + dy * dy)
@@ -26,6 +27,7 @@ def calculate_points(x1, y1, x2, y2, steps=5):
         lasty = y1 + dy * mi
         o.extend([lastx, lasty])
     return o
+
 
 def kivy_color_to_svg(color: Color) -> str:
     r_hex = format(int(color.r * 255), "02x")

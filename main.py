@@ -26,64 +26,76 @@ copy/paste this directory into /sdcard/kivy/touchtracer on your Android device.
 
 __version__ = "1.0"
 
+from enum import Enum
 from xml.dom import minidom
 
 import kivy
 from kivy.core.window import Window
-from kivy.graphics.svg import Svg
 from kivy.uix.button import Button
-from kivy.uix.image import Image
-from kivy.uix.scatter import Scatter
+from kivy.uix.checkbox import CheckBox
+from kivy.uix.slider import Slider
 from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
 
 from schemas import PointSchema, LineSchema
-from services import generate_points_on_line, kivy_color_to_svg, \
-    calculate_points, normalize_pressure
+from services import (
+    generate_points_on_line,
+    kivy_color_to_svg,
+    calculate_points,
+    normalize_pressure,
+)
 
 kivy.require("1.0.6")
 
 from kivy.app import App
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
-from kivy.graphics import Color, Rectangle, Point, GraphicException, Line
+from kivy.graphics import Color, Point, GraphicException
 from kivy.metrics import dp
 from random import random
-from math import sqrt
 
 
+# # SOURCE = "particle.png"
+# SOURCE = "egg_circle.png"
+# # SOURCE = None
+# # POINTSIZE = 30
 
 
+class Pens(Enum):
+    PEN = ("Ручка", "egg_circle.png")
+    PENCIL = ("Карандаш", "particle.png")
+    ERASER = ("Ластик", "egg_circle.png")
 
-
-
-
+# LineSchema.model_rebuild()
 class Touchtracer(FloatLayout):
     curve_count = 0
     curve_points: dict[int, LineSchema] = {}
-
-
+    current_pen = Pens.PEN
+    current_pen_size = 10
 
     def on_touch_down(self, touch):
         # return
         win = self.get_parent_window()
         ud = touch.ud
         ud["group"] = g = str(touch.uid)
-        pointsize = 30
-        print(touch.profile)
+        pointsize = self.current_pen_size
         if "pressure" in touch.profile:
             ud["pressure"] = touch.pressure
             pointsize = normalize_pressure(touch.pressure)
         # ud["color"] = random()
 
         with self.canvas:
-            ud["color"] = Color(random(), random(), random(), 1, group=g)
+            ud["color"] = (
+                Color(0, 0, 0, 1, group=g)
+                if self.current_pen == Pens.ERASER
+                else Color(random(), random(), random(), 1, group=g)
+            )
             ud["lines"] = [
                 # Rectangle(pos=(touch.x, 0), size=(1, win.height), group=g),
                 # Rectangle(pos=(0, touch.y), size=(win.width, 1), group=g),
                 Point(
                     points=(touch.x, touch.y),
-                    source="particle.png",
+                    source=self.current_pen.value[1],
                     pointsize=pointsize,
                     group=g,
                 )
@@ -99,6 +111,7 @@ class Touchtracer(FloatLayout):
             y=int(round(touch.y)),
             size=pointsize,
             color=kivy_color_to_svg(ud["color"]),
+            pen=self.current_pen.name
         )
 
         return True
@@ -120,7 +133,14 @@ class Touchtracer(FloatLayout):
             except IndexError:
                 index -= 1
 
-        points = calculate_points(oldx, oldy, touch.x, touch.y)
+        pointsize = (
+            normalize_pressure(touch.pressure)
+            if "pressure" in ud
+            else self.current_pen_size
+        )
+        points = calculate_points(
+            oldx, oldy, touch.x, touch.y, steps=pointsize / 7
+        )
 
         # if pressure changed create a new point instruction
         if "pressure" in ud:
@@ -130,14 +150,15 @@ class Touchtracer(FloatLayout):
                 or not 0.99 < (touch.pressure / old_pressure) < 1.01
             ):
                 g = ud["group"]
-                pointsize = normalize_pressure(touch.pressure)
+                # pointsize = normalize_pressure(touch.pressure)
                 with self.canvas:
                     # Color(ud["color"], 1, 1, mode="hsv", group=g)
+                    # TODO реализовать цвет для ластика
                     Color(random(), random(), random(), 1, group=g)
                     ud["lines"].append(
                         Point(
                             points=(),
-                            source="particle.png",
+                            source=self.current_pen.value[1],
                             pointsize=pointsize,
                             group=g,
                         )
@@ -148,6 +169,14 @@ class Touchtracer(FloatLayout):
                 lp = ud["lines"][-1].add_point
                 for idx in range(0, len(points), 2):
                     lp(points[idx], points[idx + 1])
+                    # print(points[idx], 600-points[idx + 1])
+                    self.curve_points[self.curve_count].points.append(
+                        PointSchema(
+                            x=int(round(points[idx])),
+                            y=int(round(points[idx + 1])),
+                            size=pointsize,
+                        )
+                    )
             except GraphicException:
                 pass
 
@@ -160,17 +189,6 @@ class Touchtracer(FloatLayout):
         else:
             ud[t] += 1
         # self.update_touch_label(ud["label"], touch)
-        self.curve_points[self.curve_count].points.append(
-            PointSchema(
-                x=int(round(touch.x)),
-                y=int(round(touch.y)),
-                size=(
-                    normalize_pressure(touch.pressure)
-                    if "pressure" in ud
-                    else 1
-                ),
-            )
-        )
 
     def on_touch_up(self, touch):
         return
@@ -211,7 +229,8 @@ class Touchtracer(FloatLayout):
                         "L{0} {1} ".format(point.x, int(dp(600) - point.y))
                     )
                 f.write(
-                    f'" fill="none" stroke="{curve.color}" stroke-width="{curve.size}"/>\n'
+                    f'" fill="none" stroke="{curve.color}" stroke-width="'
+                    f'{curve.size}" pen="{curve.pen}"/>\n'
                 )
             f.write("</svg>")
         print("Saved as", filename)
@@ -229,6 +248,7 @@ class Touchtracer(FloatLayout):
                 path.getAttribute("d"),
                 path.getAttribute("stroke"),
                 path.getAttribute("stroke-width"),
+                path.getAttribute("pen"),
             )
             for path in svg_dom.getElementsByTagName("path")
         ]
@@ -244,16 +264,19 @@ class Touchtracer(FloatLayout):
                     y = int(points_svg[i + 1])
                     points.extend([x, int(dp(600) - y)])
                 pointsize = int(path_string[2])
-                points_on_line = generate_points_on_line(points,
-                                                         pointsize)
-                Point(points=points_on_line,
-                    source="particle.png", pointsize=pointsize)
+                points_on_line = generate_points_on_line(points, pointsize)
+                Point(
+                    points=points_on_line, source=Pens[path_string[
+                        3]].value[1],
+                    pointsize=pointsize
+                )
 
                 self.curve_points[self.curve_count] = LineSchema(
                     x=points_on_line[0],
                     y=points_on_line[1],
                     size=pointsize,
                     color=path_string[1],
+                    pen=path_string[3],
                 )
                 for i in range(2, len(points_on_line), 2):
                     self.curve_points[self.curve_count].points.append(
@@ -269,30 +292,82 @@ class Touchtracer(FloatLayout):
                 # Rectangle(pos=(0, touch.y), size=(win.width, 1), group=g),
 
                 # ]
+
+
 class TouchtracerApp(App):
     title = "Touchtracer"
     icon = "icon.png"
+
+    def checkbox_pen_pressed(self, instance):
+        self.painter.current_pen = Pens.PEN
+
+    def checkbox_pencil_pressed(self, instance):
+        self.painter.current_pen = Pens.PENCIL
+
+    def checkbox_eraser_pressed(self, instance):
+        self.painter.current_pen = Pens.ERASER
+
+    def slider_pen_size_move(self, instance, value):
+        self.painter.current_pen_size = value
 
     def build(self):
 
         parent = Widget()
         self.painter = Touchtracer()
 
-        savebtn = Button(text="Save", pos=(10, 20), size=(100, 50))
+        savebtn = Button(text="Save", pos=(10, 20), size=(100, 30))
         savebtn.bind(on_release=self.save_canvas)
 
-        clearbtn = Button(text="Clear", pos=(120, 20), size=(100, 50))
+        clearbtn = Button(text="Clear", pos=(120, 20), size=(100, 30))
         clearbtn.bind(on_release=self.clear_canvas)
 
-        openbtn = Button(text="Open", pos=(230, 20), size=(100, 50))
+        openbtn = Button(text="Open", pos=(230, 20), size=(100, 30))
         openbtn.bind(on_release=self.open_svg)
-
 
         parent.add_widget(self.painter)
         parent.add_widget(clearbtn)
         parent.add_widget(savebtn)
         parent.add_widget(openbtn)
 
+        parent.add_widget(Label(text=Pens.PEN.value[0], pos=(350, -20)))
+        parent.add_widget(
+            CheckBox(
+                group="pens",
+                pos=(350, 10),
+                color=[1, 1, 1],
+                active=True,
+                allow_no_selection=False,
+                on_press=self.checkbox_pen_pressed,
+            )
+        )
+        parent.add_widget(Label(text=Pens.PENCIL.value[0], pos=(450, -20)))
+        parent.add_widget(
+            CheckBox(
+                group="pens",
+                pos=(450, 10),
+                color=[1, 1, 1],
+                allow_no_selection=False,
+                on_press=self.checkbox_pencil_pressed,
+            )
+        )
+        parent.add_widget(Label(text=Pens.ERASER.value[0], pos=(550, -20)))
+        parent.add_widget(
+            CheckBox(
+                group="pens",
+                pos=(550, 10),
+                color=[1, 1, 1],
+                allow_no_selection=False,
+                on_press=self.checkbox_eraser_pressed,
+            )
+        )
+
+        slider = Slider(orientation='vertical', min=1, max=30,
+                                 value=10, pos=(650, 10), size=(100, 130),
+                        step=1,
+                                 # on_touch_move=self.slider_pen_size_move
+                        )
+        parent.add_widget(slider)
+        slider.bind(value=self.slider_pen_size_move)
         print("Canvas size:", Window.size)
 
         return parent
